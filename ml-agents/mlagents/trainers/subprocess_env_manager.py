@@ -14,7 +14,7 @@ from mlagents_envs.exception import (
 from multiprocessing import Process, Pipe, Queue
 from multiprocessing.connection import Connection
 from queue import Empty as EmptyQueueException
-from mlagents_envs.base_env import BaseEnv, BehaviorName, BehaviorSpec
+from mlagents_envs.base_env import BaseEnv, BehaviorName, BehaviorSpec, DecisionSteps, TerminalSteps
 from mlagents_envs import logging_util
 from mlagents.trainers.env_manager import EnvManager, EnvironmentStep, AllStepResult
 from mlagents.trainers.settings import TrainerSettings
@@ -537,8 +537,27 @@ class SubprocessEnvManager(EnvManager):
 
     @timed
     def _take_step(self, last_step: EnvironmentStep) -> Dict[BehaviorName, ActionInfo]:
+        import time
+        if 'start_time' not in self.__dict__:
+            self.num_game_steps = 0
+            self.start_time = time.time()
+            self.last_print = time.time()
+            self.last_game_steps = self.num_game_steps
+        self.num_game_steps += 12
+        render = False
+        if time.time() - self.last_print >= 3:
+            print('game steps per second %.1f' % ((self.num_game_steps - self.last_game_steps) / (time.time() - self.last_print)))
+            self.last_print = time.time()
+            self.last_game_steps = self.num_game_steps
+            render = True
         all_action_info: Dict[str, ActionInfo] = {}
         for brain_name, step_tuple in last_step.current_all_step_result.items():
+            # print('subprocess_env_manager _take_step brain_name', brain_name, 'step_tuple', step_tuple)
+            decision_steps: DecisionSteps
+            terminal_steps: TerminalSteps
+            decision_steps, terminal_steps = step_tuple
+            if render:
+                print('len(dec)', len(decision_steps), 'len(term)', len(terminal_steps))
             if brain_name in self.policies:
                 all_action_info[brain_name] = self.policies[brain_name].get_action(
                     step_tuple[0], last_step.worker_id
